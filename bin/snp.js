@@ -177,15 +177,24 @@ if (opts.sl) {
 
       while (count < maxPages && !presentationEnded) {
         // Wait for page rendering lifecycle stabilization
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(2000);
         
-        // Extract uniqueness verification via internal vector elements
+        // Comprehensive multi-layer unique state extraction
         const currentSlideId = await page.evaluate(() => {
+          const indicator = document.querySelector('.punch-viewer-navbar-page-number') || 
+                            document.querySelector('.punch-viewer-page-number-indicator');
+          if (indicator && indicator.textContent.trim()) {
+            return indicator.textContent.trim();
+          }
           const svgG = document.querySelector('g.punch-viewer-svgpage-svgobj');
-          return svgG ? svgG.innerHTML.substring(0, 100) : window.location.hash;
+          if (svgG && svgG.innerHTML) {
+            return svgG.innerHTML.substring(0, 100);
+          }
+          return window.location.href + '_' + window.location.hash;
         });
 
-        if (currentSlideId === lastSlideIdentifier) {
+        // Defend against early exit conditions by verifying page tracking has commenced
+        if (count > 0 && currentSlideId === lastSlideIdentifier) {
           presentationEnded = true;
           break;
         }
