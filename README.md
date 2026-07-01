@@ -1,86 +1,124 @@
-# snp-crcli
+Here is the complete, raw markdown for your `README.md`. You can copy the entire block below and paste it straight into your file:
 
-Give it a link. It screenshots every page it can find on that site and saves them to disk, in the format you want.
+```markdown
+# snp-crcli 📸
 
-`snp` (the command this package installs) crawls a site starting from a URL you give it, following links (breadth-first, same-domain by default), and takes a full-page screenshot of every page it visits.
+Give it a link. It crawls the site, screenshots every page it can find, and saves them directly to your computer in the format you specify.
+
+`snp` (the command this package installs) performs a breadth-first crawl starting from a seed URL, following internal links on the same domain by default, and captures full-page screenshots of every page it visits.
+
+---
 
 ## Install
 
+Install the package globally via npm:
+
 ```bash
 npm install -g snp-crcli
+
 ```
 
-This also installs a headless Chromium build via Playwright (~300MB, one-time). Once installed, the command available in your terminal is `snp`.
+> **Note:** This will automatically install a headless Chromium build via Playwright (~300MB, one-time setup). Once installed, the global command available in your terminal is **`snp`**.
 
-Or run it without installing globally:
+### Local / Development Setup
+
+If you want to run it directly from the source code without installing it globally:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/snp-crcli.git
+git clone [https://github.com/sace-11/snp-crcli.git](https://github.com/sace-11/snp-crcli.git)
 cd snp-crcli
 npm install
 npx playwright install chromium
-node bin/snp.js --url https://example.com
+node bin/snp.js --url [https://example.com](https://example.com)
+
 ```
+
+---
 
 ## Usage
 
 ```bash
-snp --url https://example.com --out ./shots --format png --max 30 --depth 2
+snp --url [https://example.com](https://example.com) --out ./shots --format png --max 30 --depth 2
+
 ```
 
 ### Options
 
 | Flag | Description | Default |
-|---|---|---|
-| `-u, --url <url>` | Starting URL to crawl (required) | — |
-| `-o, --out <dir>` | Output directory | `./screenshots` |
-| `-f, --format <format>` | `png` or `jpeg` | `png` |
-| `-m, --max <number>` | Max pages to crawl | `50` |
-| `-d, --depth <number>` | Max link depth to follow | `3` |
+| --- | --- | --- |
+| `-u, --url <url>` | Starting URL to crawl (**required**) | — |
+| `-o, --out <dir>` | Output directory for images | `./screenshots` |
+| `-f, --format <format>` | Image format: `png` or `jpeg` | `png` |
+| `-m, --max <number>` | Max total pages to crawl | `50` |
+| `-d, --depth <number>` | Max link-hops deep to follow | `3` |
 | `--width <px>` | Viewport width | `1440` |
 | `--height <px>` | Viewport height | `900` |
-| `--same-domain-only` | Only follow links on the same domain | `true` |
-| `--cookies <path>` | JSON file of cookies to load before crawling (for authenticated sites) | — |
+| `--same-domain-only` | Only follow links on the exact same domain | `true` |
+| `--cookies <path>` | Path to a JSON file of session cookies to load | — |
 
 ### Example
 
 ```bash
-snp -u https://docs.example.com -o ./docs-shots -f jpeg -m 100 -d 4
+snp -u [https://docs.example.com](https://docs.example.com) -o ./docs-shots -f jpeg -m 100 -d 4
+
 ```
 
-## Output
+---
 
-Screenshots are saved to the output directory, named after the page's URL path. A `_manifest.json` is written alongside them mapping each URL to its saved filename:
+## Output Structure
+
+Screenshots are saved directly to your target directory and are dynamically named based on the URL path. A `_manifest.json` file is generated alongside the images, creating a clean map of your crawl data:
 
 ```json
 [
-  { "url": "https://example.com/", "file": "home.png" },
-  { "url": "https://example.com/about", "file": "about.png" }
+  { 
+    "url": "[https://example.com/](https://example.com/)", 
+    "file": "home.png" 
+  },
+  { 
+    "url": "[https://example.com/about](https://example.com/about)", 
+    "file": "about.png" 
+  }
 ]
+
 ```
 
-## Authenticated sites
+### Authenticated Sites
 
-Export your session cookies as JSON (matching [Playwright's cookie format](https://playwright.dev/docs/api/class-browsercontext#browser-context-add-cookies)) and pass them in:
+To crawl dashboards or pages behind login walls, export your browser session cookies into a JSON file (matching Playwright's expected cookie structure) and pass them through:
 
 ```bash
-snp --url https://app.example.com/dashboard --cookies ./cookies.json
+snp --url [https://app.example.com/dashboard](https://app.example.com/dashboard) --cookies ./cookies.json
+
 ```
 
-## How it works
+---
 
-`snp` uses [Playwright](https://playwright.dev/) to drive headless Chromium. It does a breadth-first crawl: visit a page, screenshot it, collect its links, queue up the ones that haven't been visited yet, repeat until it hits `--max` pages or runs out of `--depth`.
+## How It Works
 
-## Limitations
+`snp` utilizes Playwright to orchestrate a headless instance of Chromium. It runs a synchronized breadth-first crawl sequence:
 
-- Infinite-scroll pages will only capture what's loaded on initial render.
-- Pages gated behind login walls need a `--cookies` file.
-- JS-heavy SPAs that route without full page loads may not be crawled reliably (links are read from `<a href>` tags in the DOM after `networkidle`).
+1. Navigates to the page and waits for `networkidle`.
+2. Captures a full-page scrollable screenshot.
+3. Parses the DOM for valid `<a href>` links.
+4. Filters out external domains (by default) and queues new unique paths.
+5. Continues cycle until `--max` limits or `--depth` thresholds are encountered.
+
+### Limitations
+
+* **Infinite Scroll:** Will only capture what is loaded during the initial page lifecycle render.
+* **Complex JS Routing:** Dynamic Single Page Applications (SPAs) that handle page generation entirely through complex internal JS state transitions (without updating standard anchors) may result in reduced discovery rates.
+
+---
 
 ## Contributing
 
-PRs welcome. Open an issue first for anything bigger than a small fix.
+Pull requests are welcome. For major feature changes or structural re-architecting, please open an issue first to discuss what you would like to change.
 
 ## License
 
-MIT
+[MIT](https://www.google.com/search?q=LICENSE)
+
+```
+
+```
