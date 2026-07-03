@@ -1,6 +1,6 @@
 # clearpass
 
-Crawl a website — or a published Google Slides deck — and save what you find as PNG, JPEG, PPTX, DOCX, PDF, or interactive MHTML archives. Includes a TUI (Terminal UI) for ease of use.
+Crawl a website — or a published Google Slides deck — and save what you find as PNG, JPEG, PPTX, DOCX, PDF, or interactive MHTML archives. Includes a beautiful TUI (Terminal UI) for ease of use.
 
 ## Install
 
@@ -24,7 +24,7 @@ Once inside the TUI, use the following commands:
 - `/bulk`: Enter bulk-URL mode (paste multiple URLs, hit enter twice).
 - `/format <fmt>`: Set default output format (`png`, `jpeg`, `pptx`, `docx`, `pdf`, `mhtml`).
 - `/max <number>`: Set max pages/slides (default 300).
-- `/out <dir>`: Set output folder.
+- `/out [dir]`: Set output folder. **Leave `[dir]` blank to open a native OS folder picker!**
 - `?` or `/help`: Show all commands.
 - `q` or `/quit`: Exit.
 
@@ -46,18 +46,21 @@ clearpass -u https://example.com --scrape -f pdf
 clearpass uninstall
 ```
 
-**Full command list:**
-
-```bash
-clearpass --help
-```
-
-## How it decides a page is "ready"
-
-Instead of waiting on network events, clearpass hashes the visible frame every ~200ms and waits until the picture stops changing before it screenshots or scrapes. On Slides specifically, it also reads the on-screen page counter, so a slide with a multi-step build animation gets captured only once it's fully revealed, not mid-build.
+## Features
 
 ### Smart Security & Captcha Detection
 It can smartly detect when a site has blocked you with Cloudflare, Turnstile, or typical reCAPTCHA/hCaptcha prompts, and will gracefully abort the capture with a clear error message instead of hanging indefinitely.
+
+### Native OS Folder Picker
+When you type `/out` without a path, `clearpass` seamlessly opens the native file explorer on your OS (macOS, Windows, or Linux) so you can visually click and choose your save directory.
+
+### Visual Stability Engine
+Instead of waiting on network events, clearpass hashes the visible frame every ~200ms and waits until the picture stops changing before it screenshots or scrapes. On Slides, it reads the on-screen page counter, so a slide with a multi-step build animation gets captured only once it's fully revealed.
+
+### Dynamic File Output & Progress Bars
+- Output files are intelligently named sequentially (e.g. `snap_1.png`, `slide_1.png`, `scrape_1.md`).
+- Progress bars adapt to the context. If it's a website with an unknown depth, it tracks what it discovers. If it's a slide deck with a known total, it shows you completion percentages natively.
+- **Interruptible captures:** You can press `Ctrl+Q` at any time to gracefully abort a long capture without crashing the tool. It will save whatever it captured up to that point.
 
 ## Formats
 

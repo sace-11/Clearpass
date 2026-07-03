@@ -43,6 +43,23 @@ function chooseFolderOS() {
 const PKG = require('../package.json');
 const CONFIG_PATH = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.clearpass-config.json');
 
+global.isCapturing = false;
+global.abortCapture = false;
+
+try {
+  readline.emitKeypressEvents(process.stdin);
+} catch (_) {}
+
+process.stdin.on('keypress', (str, key) => {
+  if (key && key.ctrl && key.name === 'q') {
+    if (global.isCapturing) {
+      global.abortCapture = true;
+    } else {
+      process.exit(0);
+    }
+  }
+});
+
 // --- Fast path: uninstall ---
 if (process.argv[2] === 'uninstall') {
   console.log('Uninstalling clearpass globally...');
@@ -198,6 +215,7 @@ async function crawlGoogleSlides(context, startUrl, { outDir, imgFormat, maxPage
     const isKnownTotal = !!totalHint;
     
     if (progressBar) {
+      console.log(chalk.dim('Press Ctrl+Q to abort capture...'));
       progressBar.options.format = isKnownTotal 
         ? `${chalk.blue('{bar}')} {percentage}% | {value}/{total} pages`
         : `${chalk.blue('Capturing...')} {value} slides captured`;
@@ -209,6 +227,10 @@ async function crawlGoogleSlides(context, startUrl, { outDir, imgFormat, maxPage
     let lastFrameHash = await waitForStableFrame(page);
 
     while (slideNum <= target && iterations < maxIterations) {
+      if (global.abortCapture) {
+        console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+        break;
+      }
       iterations++;
 
       const filename = `slide_${slideNum}.${imgFormat}`;
@@ -254,11 +276,16 @@ async function crawlWebsite(context, startUrl, { outDir, imgFormat, maxPages, ma
   let count = 0;
   
   if (progressBar) {
+      console.log(chalk.dim('Press Ctrl+Q to abort capture...'));
     progressBar.options.format = `${chalk.blue('Crawling...')} {value} pages processed`;
     progressBar.start(maxPages, 0);
   }
 
   while (queue.length > 0 && count < maxPages) {
+    if (global.abortCapture) {
+      console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+      break;
+    }
     const { url, depth } = queue.shift();
     if (visited.has(url) || depth > maxDepth) continue;
     visited.add(url);
@@ -307,11 +334,16 @@ async function scrapeWebsiteText(context, startUrl, { outDir, maxPages, maxDepth
   let count = 0;
 
   if (progressBar) {
+      console.log(chalk.dim('Press Ctrl+Q to abort capture...'));
     progressBar.options.format = `${chalk.blue('Scraping...')} {value} pages extracted`;
     progressBar.start(maxPages, 0);
   }
 
   while (queue.length > 0 && count < maxPages) {
+    if (global.abortCapture) {
+      console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+      break;
+    }
     const { url, depth } = queue.shift();
     if (visited.has(url) || depth > maxDepth) continue;
     visited.add(url);
@@ -489,6 +521,9 @@ async function runCapture(browser, args) {
   const isGoogleSlides = startUrl.hostname.includes('docs.google.com') && startUrl.pathname.includes('/presentation');
 
   let trackingLog = [];
+  global.isCapturing = true;
+  global.abortCapture = false;
+
   try {
     if (format === 'mhtml') {
       console.log(chalk.yellow(`\nCreating interactive MHTML archive for ${startUrl.href}`));
@@ -508,6 +543,8 @@ async function runCapture(browser, args) {
     console.error(chalk.red(`\nError: ${err.message}`));
     return;
   } finally {
+    global.isCapturing = false;
+    global.abortCapture = false;
     if (progressBar.isActive) progressBar.stop();
     await context.close();
   }
