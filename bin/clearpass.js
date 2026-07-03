@@ -248,12 +248,17 @@ async function crawlPresentation(context, startUrl, { outDir, imgFormat, maxPage
 
     while (slideNum <= target && iterations < maxIterations) {
       if (global.abortCapture) {
-        console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+        console.log(chalk.red('\n[Interrupt] Capture aborted by user.'));
+        // Clean up all files saved so far
+        for (const item of trackingLog) {
+          try { if (fs.existsSync(item.filepath)) fs.unlinkSync(item.filepath); } catch (_) {}
+        }
+        trackingLog.length = 0;
         break;
       }
       iterations++;
 
-      const filename = `slide_${slideNum}.${imgFormat}`;
+      const filename = `Slide ${slideNum}.${imgFormat}`;
       const finalPath = path.join(outDir, filename);
       await page.screenshot({ path: finalPath, fullPage: false, type: imgFormat });
 
@@ -316,7 +321,12 @@ async function crawlWebsite(context, startUrl, { outDir, imgFormat, maxPages, ma
 
   while (queue.length > 0 && count < maxPages) {
     if (global.abortCapture) {
-      console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+      console.log(chalk.red('\n[Interrupt] Capture aborted by user.'));
+      // Clean up all files saved so far
+      for (const item of trackingLog) {
+        try { if (fs.existsSync(item.filepath)) fs.unlinkSync(item.filepath); } catch (_) {}
+      }
+      trackingLog.length = 0;
       break;
     }
     const { url, depth } = queue.shift();
@@ -328,7 +338,7 @@ async function crawlWebsite(context, startUrl, { outDir, imgFormat, maxPages, ma
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await settlePage(page);
 
-      const filename = `snap_${count + 1}.${imgFormat}`;
+      const filename = `Snap ${count + 1}.${imgFormat}`;
       const finalPath = uniquePath(outDir, filename, imgFormat);
       await page.screenshot({ path: finalPath, fullPage: true, type: imgFormat });
       trackingLog.push({ url, file: path.basename(finalPath), filepath: finalPath });
@@ -374,7 +384,12 @@ async function scrapeWebsiteText(context, startUrl, { outDir, maxPages, maxDepth
 
   while (queue.length > 0 && count < maxPages) {
     if (global.abortCapture) {
-      console.log(chalk.red('\n[Interrupt] Capture aborted by user. Saving progress...'));
+      console.log(chalk.red('\n[Interrupt] Capture aborted by user.'));
+      // Clean up all files saved so far
+      for (const item of trackingLog) {
+        try { if (fs.existsSync(item.filepath)) fs.unlinkSync(item.filepath); } catch (_) {}
+      }
+      trackingLog.length = 0;
       break;
     }
     const { url, depth } = queue.shift();
@@ -390,7 +405,7 @@ async function scrapeWebsiteText(context, startUrl, { outDir, maxPages, maxDepth
       const htmlContent = await page.evaluate(() => document.body.innerHTML);
       const markdown = NodeHtmlMarkdown.translate(htmlContent);
 
-      const filename = `scrape_${count + 1}.md`;
+      const filename = `Scrape ${count + 1}.md`;
       const finalPath = uniquePath(outDir, filename, 'md');
       fs.writeFileSync(finalPath, markdown, 'utf8');
       trackingLog.push({ url, file: path.basename(finalPath), filepath: finalPath, markdown });
@@ -517,7 +532,7 @@ async function captureMhtml(context, startUrl, outDir) {
     const cdpSession = await context.newCDPSession(page);
     const { data } = await cdpSession.send('Page.captureSnapshot', { format: 'mhtml' });
     
-    const filename = `archive_1.mhtml`;
+    const filename = `Archive 1.mhtml`;
     const finalPath = uniquePath(outDir, filename, 'mhtml');
     fs.writeFileSync(finalPath, data);
     return [{ url: startUrl.href, file: path.basename(finalPath), filepath: finalPath }];
@@ -560,28 +575,38 @@ async function runCapture(browser, args) {
 
   try {
     if (isGoogleSlides && (format === 'pdf' || format === 'pptx')) {
+      // Try native API first, fall back to visual crawler
       const page = await context.newPage();
+      let nativeOk = false;
       try {
         await downloadNativeGoogleSlides(page, startUrl, format, outDir);
-        return; 
+        nativeOk = true;
       } catch (err) {
-        console.error(chalk.red(`Native export failed (${err.message}). Falling back to screen capture...`));
+        console.error(chalk.red(`Native export failed (${err.message}). Falling back to visual capture...`));
       } finally {
         await page.close();
       }
-    }
-
-    if (isGoogleSlides && ['png', 'jpeg'].includes(format)) {
-      console.log(chalk.yellow('Note: Saving as images will strip interactive hyperlinks. Use format "pdf" or "pptx" to preserve them natively.'));
-    }
-
-    if (format === 'mhtml') {
+      if (nativeOk) {
+        // Native export succeeded — we're done
+        global.isCapturing = false;
+        global.abortCapture = false;
+        if (progressBar.isActive) progressBar.stop();
+        await context.close();
+        return;
+      }
+      // Fallback: crawl it like a generic presentation
+      console.log(chalk.yellow(`\nCapturing Google Slides via visual crawler fallback...`));
+      trackingLog = await crawlPresentation(context, startUrl, { outDir, imgFormat: ['pptx', 'docx', 'pdf'].includes(format) ? 'png' : format, maxPages, progressBar });
+    } else if (format === 'mhtml') {
       console.log(chalk.yellow(`\nCreating interactive MHTML archive for ${startUrl.href}`));
       trackingLog = await captureMhtml(context, startUrl, outDir);
     } else if (args.scrapeText) {
       console.log(chalk.yellow(`\nScraping text from ${startUrl.href}`));
       trackingLog = await scrapeWebsiteText(context, startUrl, { outDir, maxPages, maxDepth, sameDomainOnly, progressBar });
     } else if (isPresentation) {
+      if (isGoogleSlides && ['png', 'jpeg'].includes(format)) {
+        console.log(chalk.yellow('Note: Saving as images will strip interactive hyperlinks. Use format "pdf" or "pptx" to preserve them natively.'));
+      }
       console.log(chalk.yellow(`\nCapturing presentation from ${startUrl.href}`));
       trackingLog = await crawlPresentation(context, startUrl, { outDir, imgFormat, maxPages, progressBar });
     } else {
@@ -650,9 +675,11 @@ async function runInteractiveShell() {
   });
 
   const browser = await chromium.launch();
+  let bulkMode = false;
   rl.prompt();
 
   rl.on('line', async (line) => {
+    if (bulkMode) return; // bulk handler is active, skip main handler
     line = line.trim();
     if (!line) { rl.prompt(); return; }
 
@@ -700,23 +727,36 @@ async function runInteractiveShell() {
         }
       }
     } else if (cmd === '/bulk' || cmd === '/b') {
-      console.log(chalk.yellow('\nEnter URLs (one per line). Leave blank and press Enter to finish:'));
-      const urls = [];
-      for await (const bulkLine of rl) {
-        if (!bulkLine.trim()) break;
-        try {
-          new URL(bulkLine.trim());
-          urls.push(bulkLine.trim());
-        } catch {
-          console.log(chalk.red('Invalid URL, ignored.'));
-        }
-      }
+      console.log(chalk.yellow('\nEnter URLs (one per line). Press Enter on an empty line to finish:'));
+      bulkMode = true;
+      const urls = await new Promise((resolve) => {
+        const collected = [];
+        const bulkHandler = (bulkLine) => {
+          const trimmed = bulkLine.trim();
+          if (!trimmed) {
+            rl.removeListener('line', bulkHandler);
+            resolve(collected);
+            return;
+          }
+          try {
+            new URL(trimmed);
+            collected.push(trimmed);
+            console.log(chalk.green(`  + ${trimmed}`));
+          } catch {
+            console.log(chalk.red(`  \u2717 Invalid URL, ignored: ${trimmed}`));
+          }
+        };
+        rl.on('line', bulkHandler);
+      });
+      bulkMode = false;
       if (urls.length > 0) {
-        for (const url of urls) {
-          await runCapture(browser, { url });
+        console.log(chalk.cyan(`\nProcessing ${urls.length} URL(s)...\n`));
+        for (let i = 0; i < urls.length; i++) {
+          console.log(chalk.blue(`[${i + 1}/${urls.length}] ${urls[i]}`));
+          await runCapture(browser, { url: urls[i] });
         }
       } else {
-        console.log(chalk.dim('Bulk aborted.'));
+        console.log(chalk.dim('No valid URLs entered. Bulk cancelled.'));
       }
     } else if (cmd === '/snap' || cmd === '/slides' || cmd === '/s' || cmd.startsWith('http')) {
       let targetUrl = cmd.startsWith('http') ? cmd : arg;
